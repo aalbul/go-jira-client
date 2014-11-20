@@ -5,8 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"time"
-	"strconv"
-	"github.com/plouc/go-jira-client"
+	"github.com/acierto/go-jira-client"
 	"io/ioutil"
 	"launchpad.net/goyaml"
 )

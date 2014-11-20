@@ -62,6 +62,16 @@ type IssueList struct {
 	Pagination *Pagination
 }
 
+type Attachment struct {
+	Self      string	`json:"self"`
+	Id		  string	`json:"id"`
+	Filename  string	`json:"filename"`
+	Author    Person    `xml:"author"json:"author"`
+	Size 	  int		`json:"size"`
+	MimeType  string	`json:"mimetype"`
+	Content   string	`json:"content"`
+}
+
 type IssueFields struct {
 	IssueType   *IssueType
 	Summary     string
@@ -69,6 +79,7 @@ type IssueFields struct {
 	Reporter    *User
 	Assignee    *User
 	Project     *JiraProject
+	Attachment  []Attachment
 	Created     string
 }
 
@@ -108,7 +119,7 @@ type ActivityFeed struct {
 	Author   Person          `xml:"author"json:"author"`
 	Entries  []*ActivityItem `xml:"entry"json:"entries"`
 }
-	
+
 type Category struct {
 	Term string `xml:"term,attr"json:"term"`
 }
@@ -147,8 +158,8 @@ const (
 	dateLayout = "2006-01-02T15:04:05.000-0700"
 )
 
-func (j *Jira) buildAndExecRequest(method string, url string) []byte {
-	
+func (j *Jira) buildAndExecRequest(method string, url string) ([]byte, int) {
+
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		panic("Error while building jira request")
@@ -162,7 +173,7 @@ func (j *Jira) buildAndExecRequest(method string, url string) []byte {
 		fmt.Printf("%s", err)
 	}
 
-	return contents
+	return contents, resp.StatusCode
 }
 
 func (j *Jira) UserActivity(user string) (ActivityFeed, error) {
@@ -173,7 +184,7 @@ func (j *Jira) UserActivity(user string) (ActivityFeed, error) {
 
 func (j *Jira) Activity(url string) (ActivityFeed, error) {
 
-	contents := j.buildAndExecRequest("GET", url)
+	contents,_ := j.buildAndExecRequest("GET", url)
 
 	var activity ActivityFeed
 	err := xml.Unmarshal(contents, &activity)
@@ -188,7 +199,7 @@ func (j *Jira) Activity(url string) (ActivityFeed, error) {
 func (j *Jira) IssuesAssignedTo(user string, maxResults int, startAt int) IssueList {
 
 	url := j.BaseUrl + j.ApiPath + "/search?jql=assignee=\"" + url.QueryEscape(user) + "\"&startAt=" + strconv.Itoa(startAt) + "&maxResults=" + strconv.Itoa(maxResults)
-	contents := j.buildAndExecRequest("GET", url)
+	contents, _ := j.buildAndExecRequest("GET", url)
 
 	var issues IssueList
 	err := json.Unmarshal(contents, &issues)
@@ -197,8 +208,8 @@ func (j *Jira) IssuesAssignedTo(user string, maxResults int, startAt int) IssueL
 	}
 
 	for _, issue := range issues.Issues {
-    	t, _ := time.Parse(dateLayout, issue.Fields.Created)
-    	issue.CreatedAt = t
+		t, _ := time.Parse(dateLayout, issue.Fields.Created)
+		issue.CreatedAt = t
 	}
 
 	pagination := Pagination{
@@ -217,7 +228,7 @@ func (j *Jira) IssuesAssignedTo(user string, maxResults int, startAt int) IssueL
 func (j *Jira) Issue(id string) Issue {
 
 	url := j.BaseUrl + j.ApiPath + "/issue/" + id
-	contents := j.buildAndExecRequest("GET", url)
+	contents, _ := j.buildAndExecRequest("GET", url)
 
 	var issue Issue
 	err := json.Unmarshal(contents, &issue)
@@ -226,4 +237,12 @@ func (j *Jira) Issue(id string) Issue {
 	}
 
 	return issue
+}
+
+func (j *Jira) RemoveAttachment(id string) bool {
+
+	url := j.BaseUrl + j.ApiPath + "/attachment/" + id
+	_, code := j.buildAndExecRequest("DELETE", url)
+
+	return code == 204
 }
