@@ -10,6 +10,12 @@ import (
 	"strconv"
 	"time"
 	"math"
+	"io"
+	"bytes"
+	"mime/multipart"
+	"path/filepath"
+	"os"
+	"log"
 )
 
 type Jira struct {
@@ -63,13 +69,13 @@ type IssueList struct {
 }
 
 type Attachment struct {
-	Self      string	`json:"self"`
-	Id		  string	`json:"id"`
-	Filename  string	`json:"filename"`
-	Author    Person    `xml:"author"json:"author"`
-	Size 	  int		`json:"size"`
-	MimeType  string	`json:"mimetype"`
-	Content   string	`json:"content"`
+	Self        string    `json:"self"`
+	Id          string    `json:"id"`
+	Filename    string    `json:"filename"`
+	Author      Person    `xml:"author"json:"author"`
+	Size        int        `json:"size"`
+	MimeType    string    `json:"mimetype"`
+	Content     string    `json:"content"`
 }
 
 type IssueFields struct {
@@ -184,7 +190,7 @@ func (j *Jira) UserActivity(user string) (ActivityFeed, error) {
 
 func (j *Jira) Activity(url string) (ActivityFeed, error) {
 
-	contents,_ := j.buildAndExecRequest("GET", url)
+	contents, _ := j.buildAndExecRequest("GET", url)
 
 	var activity ActivityFeed
 	err := xml.Unmarshal(contents, &activity)
@@ -239,9 +245,66 @@ func (j *Jira) Issue(id string) Issue {
 	return issue
 }
 
-func (j *Jira) RemoveAttachment(id string) bool {
+func (j *Jira) createRequestWithAttachment(url string, path string) (resp *http.Response, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
 
-	url := j.BaseUrl + j.ApiPath + "/attachment/" + id
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filepath.Base(path))
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(part, file)
+
+	err = writer.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", url, body)
+
+	req.Header.Add("Content-Type", writer.FormDataContentType())
+	req.SetBasicAuth(j.Auth.Login, j.Auth.Password)
+	req.Header.Add("X-Atlassian-Token", "nocheck")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := &http.Client{}
+
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	} else {
+		body := &bytes.Buffer{}
+		_, err := body.ReadFrom(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+
+	return resp, err
+}
+
+func (j *Jira) AddAttachment(issueKey string, path string) bool {
+	url := j.BaseUrl + j.ApiPath + "/issue/" + issueKey + "/attachments"
+	resp, err := j.createRequestWithAttachment(url, path)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return resp.StatusCode == 200
+}
+
+func (j *Jira) RemoveAttachment(issueId string) bool {
+
+	url := j.BaseUrl + j.ApiPath + "/attachment/" + issueId
 	_, code := j.buildAndExecRequest("DELETE", url)
 
 	return code == 204
