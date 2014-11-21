@@ -321,13 +321,8 @@ func (j *Jira) UpdateAttachment(issueKey string, path string) error {
 
 func (j *Jira) AddAttachment(issueKey string, path string) error {
 	url := j.BaseUrl + j.ApiPath + "/issue/" + issueKey + "/attachments"
-	hasAttachment, err := j.HasAttachment(issueKey, filepath.Base(path))
 
-	if err != nil {
-		return err
-	}
-
-	if hasAttachment {
+	if j.HasAttachment(issueKey, filepath.Base(path)) {
 		return JiraError{fmt.Sprintf("Jira issue %s already has XLA attachment", issueKey)}
 	}
 
@@ -362,14 +357,9 @@ func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (st
 	return "", JiraError{"Attachment hasn't been found"}
 }
 
-func (j *Jira) HasAttachment(issueKey string, attachmentFileName string) (bool, error) {
-	attachmentId, err := j.FindAttachment(issueKey, attachmentFileName)
-
-	if err != nil {
-		return false, err
-	}
-
-	return attachmentId != "", nil
+func (j *Jira) HasAttachment(issueKey string, attachmentFileName string) bool {
+	attachmentId, _ := j.FindAttachment(issueKey, attachmentFileName)
+	return attachmentId != ""
 }
 
 func (j *Jira) FindAttachment(issueKey string, attachmentFileName string) (string, error) {
