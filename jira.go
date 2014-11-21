@@ -300,15 +300,24 @@ func (j *Jira) createRequestWithAttachment(url string, path string) (resp *http.
 	return resp, err
 }
 
-func (j *Jira) AddAttachment(issueKey string, path string) bool {
+func (j *Jira) AddAttachment(issueKey string, path string) error {
 	url := j.BaseUrl + j.ApiPath + "/issue/" + issueKey + "/attachments"
+
+	if j.HasAttachment(issueKey, filepath.Base(path)) {
+		return JiraError{fmt.Sprintf("Jira issue %s already has XLA attachment", issueKey)}
+	}
+
 	resp, err := j.createRequestWithAttachment(url, path)
 
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	return resp.StatusCode == 200
+	if resp.StatusCode != 200 {
+		return JiraError{fmt.Sprintf("Failed to add attachment. Status code is %d", resp.StatusCode)}
+	}
+
+	return nil
 }
 
 func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (string, error) {
@@ -322,6 +331,17 @@ func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (st
 	}
 
 	return "", JiraError{"Attachment hasn't been found"}
+}
+
+func (j *Jira) HasAttachment(issueId string, attachmentFileName string) bool {
+
+	for _,attachment := range j.Issue(issueId).Fields.Attachment {
+		if strings.EqualFold(attachment.Filename, attachmentFileName) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (j *Jira) downloadFromUrl(url string, fileName string) {
