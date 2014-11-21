@@ -19,6 +19,14 @@ import (
 	"strings"
 )
 
+type JiraError struct {
+	What string
+}
+
+func (e JiraError) Error() string {
+	return e.What
+}
+
 type Jira struct {
 	BaseUrl      string
 	ApiPath      string
@@ -303,16 +311,17 @@ func (j *Jira) AddAttachment(issueKey string, path string) bool {
 	return resp.StatusCode == 200
 }
 
-func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) bool {
+func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (string, error) {
 
 	for _,attachment := range j.Issue(issueId).Fields.Attachment {
 		if strings.EqualFold(attachment.Filename, attachmentFileName) {
-			println(attachment.Content)
 			j.downloadFromUrl(attachment.Content, attachmentFileName)
+			pwd, err := os.Getwd()
+			return pwd + string(os.PathSeparator) + attachmentFileName, err
 		}
 	}
 
-	return true
+	return "", JiraError{"Attachment hasn't been found"}
 }
 
 func (j *Jira) downloadFromUrl(url string, fileName string) {
