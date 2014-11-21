@@ -320,6 +320,7 @@ func (j *Jira) UpdateAttachment(issueKey string, path string) error {
 }
 
 func (j *Jira) AddAttachment(issueKey string, path string) error {
+
 	url := j.BaseUrl + j.ApiPath + "/issue/" + issueKey + "/attachments"
 
 	if j.HasAttachment(issueKey, filepath.Base(path)) {
@@ -330,6 +331,10 @@ func (j *Jira) AddAttachment(issueKey string, path string) error {
 
 	if err != nil {
 		return err
+	}
+
+	if resp.StatusCode == 404 {
+		return JiraError{fmt.Sprintf("Issue [%s] has not been found", issueKey)}
 	}
 
 	if resp.StatusCode != 200 {
