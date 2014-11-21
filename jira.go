@@ -240,10 +240,14 @@ func (j *Jira) IssuesAssignedTo(user string, maxResults int, startAt int) IssueL
 }
 
 // search an issue by its id
-func (j *Jira) Issue(id string) Issue {
+func (j *Jira) Issue(id string) (Issue, error) {
 
 	url := j.BaseUrl + j.ApiPath + "/issue/" + id
-	contents, _ := j.buildAndExecRequest("GET", url)
+	contents, code := j.buildAndExecRequest("GET", url)
+
+	if code == 404 {
+		return Issue{}, JiraError{fmt.Sprintf("Issue [%s] has not been found", id)}
+	}
 
 	var issue Issue
 	err := json.Unmarshal(contents, &issue)
@@ -251,7 +255,7 @@ func (j *Jira) Issue(id string) Issue {
 		fmt.Println("%s", err)
 	}
 
-	return issue
+	return issue, nil
 }
 
 func (j *Jira) createRequestWithAttachment(url string, path string) (resp *http.Response, err error) {
@@ -302,7 +306,11 @@ func (j *Jira) createRequestWithAttachment(url string, path string) (resp *http.
 
 func (j *Jira) UpdateAttachment(issueKey string, path string) error {
 
-	attachmentId := j.FindAttachment(issueKey, path)
+	attachmentId, err := j.FindAttachment(issueKey, path)
+
+	if err != nil {
+		return err
+	}
 
 	if attachmentId != "" {
 		j.RemoveAttachment(attachmentId)
@@ -313,8 +321,13 @@ func (j *Jira) UpdateAttachment(issueKey string, path string) error {
 
 func (j *Jira) AddAttachment(issueKey string, path string) error {
 	url := j.BaseUrl + j.ApiPath + "/issue/" + issueKey + "/attachments"
+	hasAttachment, err := j.HasAttachment(issueKey, filepath.Base(path))
 
-	if j.HasAttachment(issueKey, filepath.Base(path)) {
+	if err != nil {
+		return err
+	}
+
+	if hasAttachment {
 		return JiraError{fmt.Sprintf("Jira issue %s already has XLA attachment", issueKey)}
 	}
 
@@ -333,7 +346,12 @@ func (j *Jira) AddAttachment(issueKey string, path string) error {
 
 func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (string, error) {
 
-	for _,attachment := range j.Issue(issueId).Fields.Attachment {
+	issue, err := j.Issue(issueId)
+	if err != nil {
+		return "", err
+	}
+
+	for _,attachment := range issue.Fields.Attachment {
 		if strings.EqualFold(attachment.Filename, attachmentFileName) {
 			j.downloadFromUrl(attachment.Content, attachmentFileName)
 			pwd, err := os.Getwd()
@@ -344,19 +362,29 @@ func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (st
 	return "", JiraError{"Attachment hasn't been found"}
 }
 
-func (j *Jira) HasAttachment(issueKey string, attachmentFileName string) bool {
-	return j.FindAttachment(issueKey, attachmentFileName) != ""
+func (j *Jira) HasAttachment(issueKey string, attachmentFileName string) (bool, error) {
+	attachmentId, err := j.FindAttachment(issueKey, attachmentFileName)
+
+	if err != nil {
+		return false, err
+	}
+
+	return attachmentId != "", nil
 }
 
-func (j *Jira) FindAttachment(issueKey string, attachmentFileName string) string {
+func (j *Jira) FindAttachment(issueKey string, attachmentFileName string) (string, error) {
+	issue, err := j.Issue(issueKey)
+	if err != nil {
+		return "", err
+	}
 
-	for _,attachment := range j.Issue(issueKey).Fields.Attachment {
+	for _,attachment := range issue.Fields.Attachment {
 		if strings.EqualFold(attachment.Filename, filepath.Base(attachmentFileName)) {
-			return attachment.Id
+			return attachment.Id, nil
 		}
 	}
 
-	return ""
+	return "", JiraError{fmt.Sprintf("Attachment %s has not been found", attachmentFileName)}
 }
 
 func (j *Jira) downloadFromUrl(url string, fileName string) {
