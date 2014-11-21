@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"os"
 	"log"
+	"strings"
 )
 
 type Jira struct {
@@ -300,6 +301,56 @@ func (j *Jira) AddAttachment(issueKey string, path string) bool {
 	}
 
 	return resp.StatusCode == 200
+}
+
+func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) bool {
+
+	for _,attachment := range j.Issue(issueId).Fields.Attachment {
+		if strings.EqualFold(attachment.Filename, attachmentFileName) {
+			println(attachment.Content)
+			j.downloadFromUrl(attachment.Content, attachmentFileName)
+		}
+	}
+
+	return true
+}
+
+func (j *Jira) downloadFromUrl(url string, fileName string) {
+	fmt.Println("Downloading", url, "to", fileName)
+
+	if j.isExist(fileName) {
+		os.Remove(fileName)
+	}
+
+	output, err := os.Create(fileName)
+	if err != nil {
+		log.Fatal("Error while creating", fileName, "-", err)
+		return
+	}
+	defer output.Close()
+
+	req, err := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth(j.Auth.Login, j.Auth.Password)
+	response, err := j.Client.Do(req)
+
+	if err != nil {
+		log.Fatal("Error while downloading", url, "-", err)
+		return
+	}
+	defer response.Body.Close()
+
+	n, err := io.Copy(output, response.Body)
+	if err != nil {
+		log.Fatal("Error while downloading", url, "-", err)
+		return
+	}
+
+	log.Print(n, " bytes downloaded.")
+}
+
+func (j *Jira) isExist(filename string) bool {
+	_, err := os.Stat(filename);
+	return !os.IsNotExist(err)
 }
 
 func (j *Jira) RemoveAttachment(issueId string) bool {
