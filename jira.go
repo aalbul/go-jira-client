@@ -300,6 +300,17 @@ func (j *Jira) createRequestWithAttachment(url string, path string) (resp *http.
 	return resp, err
 }
 
+func (j *Jira) UpdateAttachment(issueKey string, path string) error {
+
+	attachmentId := j.FindAttachment(issueKey, path)
+
+	if attachmentId != "" {
+		j.RemoveAttachment(attachmentId)
+	}
+
+	return j.AddAttachment(issueKey, path)
+}
+
 func (j *Jira) AddAttachment(issueKey string, path string) error {
 	url := j.BaseUrl + j.ApiPath + "/issue/" + issueKey + "/attachments"
 
@@ -333,15 +344,19 @@ func (j *Jira) DownloadAttachment(issueId string, attachmentFileName string) (st
 	return "", JiraError{"Attachment hasn't been found"}
 }
 
-func (j *Jira) HasAttachment(issueId string, attachmentFileName string) bool {
+func (j *Jira) HasAttachment(issueKey string, attachmentFileName string) bool {
+	return j.FindAttachment(issueKey, attachmentFileName) != ""
+}
 
-	for _,attachment := range j.Issue(issueId).Fields.Attachment {
-		if strings.EqualFold(attachment.Filename, attachmentFileName) {
-			return true
+func (j *Jira) FindAttachment(issueKey string, attachmentFileName string) string {
+
+	for _,attachment := range j.Issue(issueKey).Fields.Attachment {
+		if strings.EqualFold(attachment.Filename, filepath.Base(attachmentFileName)) {
+			return attachment.Id
 		}
 	}
 
-	return false
+	return ""
 }
 
 func (j *Jira) downloadFromUrl(url string, fileName string) {
