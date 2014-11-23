@@ -379,7 +379,7 @@ func (j *Jira) FindAttachment(issueKey string, attachmentFileName string) (strin
 		}
 	}
 
-	return "", JiraError{fmt.Sprintf("Attachment %s has not been found", attachmentFileName)}
+	return "", nil
 }
 
 func (j *Jira) downloadFromUrl(url string, fileName string) {
