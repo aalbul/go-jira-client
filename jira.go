@@ -175,6 +175,13 @@ const (
 
 func (j *Jira) buildAndExecRequest(method string, url string) ([]byte, int) {
 
+	defer func() {
+		if e := recover(); e != nil {
+			fmt.Printf("URL %s is not accessible", url)
+			os.Exit(1)
+		}
+	}()
+
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		panic("Error while building jira request")
@@ -244,6 +251,10 @@ func (j *Jira) Issue(id string) (Issue, error) {
 
 	url := j.BaseUrl + j.ApiPath + "/issue/" + id
 	contents, code := j.buildAndExecRequest("GET", url)
+
+	if code == 401 {
+		return Issue{}, JiraError{fmt.Sprintf("Your login or password to Jira is incorrect")}
+	}
 
 	if code == 404 {
 		return Issue{}, JiraError{fmt.Sprintf("Issue [%s] has not been found", id)}
