@@ -49,6 +49,12 @@ type Pagination struct {
 	Pages      []int
 }
 
+type IssuePickRequest struct {
+	Query				string
+	ShowSubTasks		bool
+	ShowSubTaskParent	bool
+}
+
 func (p *Pagination) Compute() {
 	p.PageCount = int(math.Ceil(float64(p.Total) / float64(p.MaxResults)))
 	p.Page = int(math.Ceil(float64(p.StartAt) / float64(p.MaxResults)))
@@ -60,9 +66,11 @@ func (p *Pagination) Compute() {
 }
 
 type Issue struct {
-	Id        string
-	Key       string
+	Id        string		`json:"id"`
+	Key       string		`json:"key"`
 	Self      string
+	Image	  string		`json:"img"`
+	Summary	  string		`json:"summary"`
 	Expand    string
 	Fields    *IssueFields
 	CreatedAt time.Time
@@ -178,7 +186,6 @@ func (j *Jira) buildAndExecRequest(method string, url string) ([]byte, int) {
 	defer func() {
 		if e := recover(); e != nil {
 			fmt.Printf("URL %s is not accessible", url)
-			os.Exit(1)
 		}
 	}()
 
@@ -437,4 +444,29 @@ func (j *Jira) RemoveAttachment(issueId string) bool {
 	_, code := j.buildAndExecRequest("DELETE", url)
 
 	return code == 204
+}
+
+func (j *Jira) PickIssues(request *IssuePickRequest) []*Issue {
+	type IssuePickSection struct {
+		Issues []*Issue `json:"issues"`
+	}
+	
+	type IssuePick struct {
+		Sections []*IssuePickSection `json:"sections"`
+	}
+
+	pickUrl := j.BaseUrl + j.ApiPath + "/issue/picker"
+	params := url.Values {}
+	params.Add("query", request.Query)
+	params.Add("showSubTaskParent", strconv.FormatBool(request.ShowSubTaskParent))
+	params.Add("showSubTasks", strconv.FormatBool(request.ShowSubTasks))
+	
+	contents, _ := j.buildAndExecRequest("GET", fmt.Sprintf("%s?%s", pickUrl, params.Encode()))
+	var pick IssuePick
+	json.Unmarshal(contents, &pick)
+	if len(pick.Sections) > 0 {
+		return pick.Sections[0].Issues
+	} else {
+		return []*Issue{}
+	}
 }
